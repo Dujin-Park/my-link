@@ -29,7 +29,9 @@ export default function Home() {
           suppressHydrationWarning
           className="text-base leading-relaxed text-zinc-600 dark:text-zinc-400"
         >
-          안녕하세요! 바이브 코딩을 배우고 있는 대학생입니다.
+          아이디어를 빠르게 현실로 만드는 프론트엔드 개발자입니다.
+          <br />
+          Next.js와 TypeScript로 깔끔하고 직관적인 웹 경험을 설계합니다.
         </p>
       </div>
     </main>
