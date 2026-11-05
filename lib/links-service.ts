@@ -1,17 +1,18 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   getDocs,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   type QueryDocumentSnapshot,
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import type { IconName, LinkItem } from "@/lib/dummy-data"
 import type { NewLinkInput } from "@/lib/store"
-
-const ANONYMOUS_LINKS_PATH = ["users", "anonymous", "links"] as const
 
 function mapDocToLinkItem(docSnap: QueryDocumentSnapshot): LinkItem {
   const data = docSnap.data()
@@ -30,9 +31,9 @@ function mapDocToLinkItem(docSnap: QueryDocumentSnapshot): LinkItem {
   }
 }
 
-export async function fetchFirestoreLinks(): Promise<LinkItem[]> {
+export async function fetchFirestoreLinks(userId: string): Promise<LinkItem[]> {
   const q = query(
-    collection(db, "users", "anonymous", "links"),
+    collection(db, "users", userId, "links"),
     orderBy("createdAt", "desc")
   )
   const querySnapshot = await getDocs(q)
@@ -40,9 +41,10 @@ export async function fetchFirestoreLinks(): Promise<LinkItem[]> {
 }
 
 export async function createFirestoreLink(
+  userId: string,
   input: NewLinkInput
 ): Promise<LinkItem> {
-  const linksCollectionRef = collection(db, ...ANONYMOUS_LINKS_PATH)
+  const linksCollectionRef = collection(db, "users", userId, "links")
   const trimmedTitle = input.title.trim()
   const trimmedUrl = input.url.trim()
   const trimmedSubtitle =
@@ -72,4 +74,25 @@ export async function createFirestoreLink(
     enabled: true,
     isHighlight,
   }
+}
+
+export async function updateFirestoreLink(
+  userId: string,
+  id: string,
+  updates: { title: string; url: string }
+): Promise<void> {
+  const linkDocRef = doc(db, "users", userId, "links", id)
+  await updateDoc(linkDocRef, {
+    title: updates.title.trim(),
+    url: updates.url.trim(),
+    updatedAt: serverTimestamp(),
+  })
+}
+
+export async function deleteFirestoreLink(
+  userId: string,
+  id: string
+): Promise<void> {
+  const linkDocRef = doc(db, "users", userId, "links", id)
+  await deleteDoc(linkDocRef)
 }

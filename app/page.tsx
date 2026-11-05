@@ -1,69 +1,59 @@
 "use client"
 
 import * as React from "react"
-import Image from "next/image"
-import { AddLinkDialog } from "@/components/add-link-dialog"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { LinkCardItem } from "@/components/link-card-item"
-import { DEFAULT_LINKS, DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
-import {
-  createFirestoreLink,
-  fetchFirestoreLinks,
-} from "@/lib/links-service"
-import type { NewLinkInput } from "@/lib/store"
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  type User,
+} from "firebase/auth"
+import { Loader2 } from "lucide-react"
+import { AuthHeader } from "@/components/AuthHeader"
+import { LandingPage } from "@/components/LandingPage"
+import { MyPage } from "@/components/MyPage"
+import { Card } from "@/components/ui/card"
+import { auth, googleProvider } from "@/lib/firebase"
 
 export default function Home() {
-  const [profile] = React.useState(DEFAULT_PROFILE)
-  const [firestoreLinks, setFirestoreLinks] = React.useState<LinkItem[]>([])
-  const [isLoading, setIsLoading] = React.useState(true)
+  const [user, setUser] = React.useState<User | null>(null)
+  const [isAuthLoading, setIsAuthLoading] = React.useState(true)
+  const [isSigningIn, setIsSigningIn] = React.useState(false)
+  const [authError, setAuthError] = React.useState("")
 
+  // onAuthStateChanged를 사용하여 새로고침 시에도 로그인 세션 유지
   React.useEffect(() => {
-    // 페이지 최초 마운트 시 getDocs로 1회 조회 (createdAt 최신순 정렬)
-    let isMounted = true
-    setIsLoading(true)
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser)
+      setIsAuthLoading(false)
+    })
 
-    fetchFirestoreLinks()
-      .then((loadedLinks) => {
-        if (isMounted) {
-          setFirestoreLinks(loadedLinks)
-        }
-      })
-      .catch((error) => {
-        console.error("Firestore 링크 조회 오류:", error)
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      isMounted = false
-    }
+    return () => unsubscribe()
   }, [])
 
-  const handleAddLink = async (input: NewLinkInput) => {
-    setIsLoading(true)
+  const handleSignInWithGoogle = async () => {
     try {
-      // Firestore에 저장 후 반환된 새 링크를 클라이언트 상태 최상단(최신순)에 즉시 동기화
-      const createdLink = await createFirestoreLink(input)
-      setFirestoreLinks((prev) => [createdLink, ...prev])
+      setIsSigningIn(true)
+      setAuthError("")
+      await signInWithPopup(auth, googleProvider)
+    } catch (err) {
+      console.error("Google 로그인 오류:", err)
+      setAuthError(
+        err instanceof Error
+          ? `로그인에 실패했어요: ${err.message}`
+          : "Google 로그인 중 문제가 발생했어요."
+      )
     } finally {
-      setIsLoading(false)
+      setIsSigningIn(false)
     }
   }
 
-  // 새로 추가된 Firestore 링크(createdAt 최신순)를 상단에 배치하고 기본 링크와 함께 표시
-  const allLinks = [...firestoreLinks, ...DEFAULT_LINKS]
-  const enabledLinks = allLinks.filter((link) => link.enabled)
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth)
+    } catch (err) {
+      console.error("로그아웃 오류:", err)
+    }
+  }
 
   return (
     <main
@@ -75,217 +65,32 @@ export default function Home() {
         suppressHydrationWarning
         className="flex min-h-screen w-full max-w-[480px] flex-col bg-[var(--tds-grey-100)] sm:min-h-0 sm:gap-3"
       >
-        {/* Top App Bar (56pt 높이, 좌측 정렬 타이틀, 우측 아이콘 버튼 슬롯) */}
-        <header className="sticky top-0 z-20 flex h-[56px] w-full items-center justify-between border-b border-[var(--tds-grey-200)] bg-[var(--tds-white)]/90 px-6 backdrop-blur-md sm:rounded-t-[24px]">
-          <span className="text-[18px] font-semibold tracking-[-0.01em] text-[var(--tds-grey-900)]">
-            내 프로필
-          </span>
-          <Button
-            variant="tdsIcon"
-            size="tdsIcon"
-            aria-label="저장소 보기"
-            nativeButton={false}
-            render={
-              <a
-                href="https://github.com/Dujin-Park/my-link"
-                target="_blank"
-                rel="noopener noreferrer"
-              />
-            }
-          >
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="18" cy="5" r="3" />
-              <circle cx="6" cy="12" r="3" />
-              <circle cx="18" cy="19" r="3" />
-              <line x1="8.59" x2="15.42" y1="13.51" y2="17.49" />
-              <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
-            </svg>
-          </Button>
-        </header>
+        {/* Top App Bar: 비로그인 시 'Google로 로그인' 버튼 / 로그인 시 프로필 이미지, 이름, 드롭다운 메뉴, 로그아웃 버튼 */}
+        <AuthHeader
+          user={user}
+          isAuthLoading={isAuthLoading}
+          isSigningIn={isSigningIn}
+          onSignInWithGoogle={handleSignInWithGoogle}
+          onSignOut={handleSignOut}
+        />
 
-        {/* 섹션 1: 프로필 Hero 카드 */}
-        <Card
-          suppressHydrationWarning
-          className="items-center px-6 pt-8 pb-7 text-center"
-        >
-          {/* 직무 Badge */}
-          <Badge variant="role" className="mb-4">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--tds-blue-500)]" />
-            {profile.badge}
-          </Badge>
-
-          {/* Asset (아바타) */}
-          <div className="relative mb-5 h-[104px] w-[104px] overflow-hidden rounded-full border border-[var(--tds-grey-200)] bg-[var(--tds-blue-50)]">
-            <Image
-              src={profile.avatarUrl}
-              alt={`${profile.name} 프로필 일러스트`}
-              width={104}
-              height={104}
-              className="h-full w-full object-cover"
-              priority
-            />
-          </div>
-
-          {/* 이름: TDS h2 */}
-          <h1 className="text-[24px] font-bold leading-[1.3] tracking-[-0.02em] text-[var(--tds-grey-900)]">
-            {profile.name}
-          </h1>
-
-          {/* 소개글: TDS body-2 + 해요체 보이스 */}
-          <p className="mt-2.5 max-w-[320px] whitespace-pre-line text-[15px] font-normal leading-[1.5] tracking-[-0.005em] text-[var(--tds-grey-700)]">
-            {profile.bio}
-          </p>
-
-          {/* 요약 지표 (Tabular figures 적용) */}
-          <div className="mt-6 grid w-full grid-cols-3 divide-x divide-[var(--tds-grey-200)] rounded-[16px] border border-[var(--tds-grey-200)] bg-[var(--tds-grey-50)] py-3.5">
-            <div className="flex flex-col items-center">
-              <span className="text-[12px] font-medium text-[var(--tds-grey-600)]">
-                주력 분야
-              </span>
-              <span className="mt-0.5 text-[15px] font-bold text-[var(--tds-grey-900)]">
-                웹 프론트엔드
-              </span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-[12px] font-medium text-[var(--tds-grey-600)]">
-                진행 프로젝트
-              </span>
-              <span className="tabular-nums mt-0.5 text-[15px] font-bold text-[var(--tds-blue-500)]">
-                2개
-              </span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-[12px] font-medium text-[var(--tds-grey-600)]">
-                응답 속도
-              </span>
-              <span className="tabular-nums mt-0.5 text-[15px] font-bold text-[var(--tds-grey-900)]">
-                24시간 이내
-              </span>
-            </div>
-          </div>
-
-          {/* 기술 스택 Chip 리스트 */}
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-            {profile.chips.map((chip) => (
-              <Badge
-                key={chip.name}
-                variant={chip.active ? "chipActive" : "chipInactive"}
-              >
-                {chip.name}
-              </Badge>
-            ))}
-          </div>
-        </Card>
-
-        {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
-        <div className="h-3 w-full sm:hidden" />
-
-        {/* 새로운 링크 추가하기 버튼 영역 (프로필 바로 아래, 목록 위) */}
-        <div className="px-6 py-3 sm:px-0 sm:py-0">
-          <AddLinkDialog onAddLink={handleAddLink} />
-        </div>
-
-        {/* 섹션 2: 멀티링크 리스트 (Card + LinkCardItem) */}
-        <Card suppressHydrationWarning className="pt-6 pb-4">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CardTitle>한번에 둘러보기</CardTitle>
-              {isLoading ? (
-                <span className="inline-flex items-center gap-1.5 rounded-[999px] bg-[var(--tds-blue-50)] px-2.5 py-0.5 text-[12px] font-semibold text-[var(--tds-blue-500)]">
-                  <svg
-                    className="size-3 animate-spin"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    />
-                    <path
-                      className="opacity-90"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  불러오는 중...
-                </span>
-              ) : null}
-            </div>
-            <CardDescription className="tabular-nums">
-              채널 {enabledLinks.length}개
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="divide-y divide-[var(--tds-grey-200)]/60">
-            {isLoading && firestoreLinks.length === 0 ? (
-              <div className="flex min-h-[72px] w-full animate-pulse items-center justify-between px-6 py-[14px]">
-                <div className="flex items-center gap-[14px]">
-                  <div className="h-[44px] w-[44px] rounded-[14px] bg-[var(--tds-grey-100)]" />
-                  <div className="flex flex-col gap-2">
-                    <div className="h-4 w-32 rounded-md bg-[var(--tds-grey-100)]" />
-                    <div className="h-3 w-48 rounded-md bg-[var(--tds-grey-100)]" />
-                  </div>
-                </div>
-                <div className="h-4 w-10 rounded-md bg-[var(--tds-grey-100)]" />
-              </div>
-            ) : null}
-            {enabledLinks.map((item) => (
-              <LinkCardItem key={item.id} item={item} />
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* 섹션 3: Bottom-Info + 화면당 단 하나뿐인 Primary CTA */}
-        <Card
-          suppressHydrationWarning
-          className="mt-auto items-center px-6 pt-4 pb-8 sm:py-6"
-        >
-          <Badge variant="pillInfo" className="mb-3">
-            새로운 프로젝트 제안을 열어두고 있어요
-          </Badge>
-
-          {/* 유일한 Primary CTA 버튼 */}
-          <Button
-            variant="tdsPrimary"
-            size="tdsXl"
-            nativeButton={false}
-            render={
-              <a
-                href="https://github.com/Dujin-Park"
-                target="_blank"
-                rel="noopener noreferrer"
-              />
-            }
-          >
-            GitHub 구경하기
-          </Button>
-
-          {/* 보조 액션: Secondary/Ghost 버튼 */}
-          <Button
-            variant="tdsGhost"
-            size="tdsMd"
-            className="mt-2"
-            nativeButton={false}
-            render={
-              <a href="mailto:337679249+Dujin-Park@users.noreply.github.com" />
-            }
-          >
-            가볍게 메시지 보내기
-          </Button>
-        </Card>
+        {/* 인증 상태 확인 중 로딩 스켈레톤 / 비로그인 시 LandingPage / 로그인 완료 시 MyPage */}
+        {isAuthLoading ? (
+          <Card className="flex min-h-[420px] flex-1 flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+            <Loader2 className="size-7 animate-spin text-[var(--tds-blue-500)]" />
+            <p className="text-[14px] font-medium text-[var(--tds-grey-600)]">
+              로그인 정보를 확인하고 있어요...
+            </p>
+          </Card>
+        ) : user ? (
+          <MyPage user={user} />
+        ) : (
+          <LandingPage
+            isSigningIn={isSigningIn}
+            authError={authError}
+            onSignInWithGoogle={handleSignInWithGoogle}
+          />
+        )}
       </div>
     </main>
   )

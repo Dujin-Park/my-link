@@ -1,7 +1,9 @@
 "use client"
 
 import * as React from "react"
+import { Loader2 } from "lucide-react"
 import type { IconName } from "@/lib/dummy-data"
+import { validateLinkForm } from "@/lib/schemas"
 import type { NewLinkInput } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,23 +26,6 @@ const ICON_OPTIONS: { value: IconName; label: string }[] = [
   { value: "book", label: "블로그" },
   { value: "mail", label: "이메일" },
 ]
-
-function isValidHttpUrl(value: string): boolean {
-  const trimmed = value.trim()
-  if (!/^https?:\/\/.+/i.test(trimmed)) {
-    return false
-  }
-  try {
-    const parsed = new URL(trimmed)
-    return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-      Boolean(parsed.hostname) &&
-      parsed.hostname.includes(".")
-    )
-  } catch {
-    return false
-  }
-}
 
 export interface AddLinkDialogProps {
   onAddLink: (newLink: NewLinkInput) => Promise<void> | void
@@ -82,23 +67,11 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
-    let isValid = true
+    const validation = validateLinkForm({ title, url })
+    setTitleError(validation.titleError)
+    setUrlError(validation.urlError)
 
-    if (title.trim().length < 1) {
-      setTitleError("제목을 입력해주세요")
-      isValid = false
-    } else {
-      setTitleError("")
-    }
-
-    if (!isValidHttpUrl(url)) {
-      setUrlError("올바른 URL 형식이 아닙니다. 예: https://example.com")
-      isValid = false
-    } else {
-      setUrlError("")
-    }
-
-    if (!isValid) {
+    if (!validation.success) {
       return
     }
 
@@ -327,25 +300,7 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
             >
               {isSubmitting ? (
                 <>
-                  <svg
-                    className="size-4 animate-spin text-white"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    />
-                    <path
-                      className="opacity-90"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
+                  <Loader2 className="size-4 animate-spin" />
                   저장 중...
                 </>
               ) : (

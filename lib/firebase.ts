@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
-import { getAuth } from "firebase/auth"
+import { GoogleAuthProvider, getAuth } from "firebase/auth"
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,11 +12,8 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 }
 
-// 중복 초기화를 방지하여 Firebase 앱 인스턴스 생성
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig)
-
-// Firestore 및 Auth 인스턴스 내보내기
-const db = getFirestore(app)
-const auth = getAuth(app)
-
-export { app, db, auth, firebaseConfig }
+// Firestore, Auth 인스턴스 및 GoogleAuthProvider 내보내기
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
