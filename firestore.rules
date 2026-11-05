@@ -1,0 +1,217 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: /users/{userId}
+// Document ID: {userId} (Firebase Auth UID)
+// Fields:
+//   - uid: string (optional on partial merge, must match userId if present, immutable)
+//   - username: string (optional, 1..100 chars) - public handle
+//   - displayName: string (optional, 1..100 chars) - public display name
+//   - bio: string (optional, 0..1000 chars) - public biography
+//   - avatarUrl: string (optional, 0..2048 chars) - profile avatar URL or path
+//   - email: string (optional, 0..320 chars) - user email address
+//   - createdAt: timestamp (optional, immutable once set) - creation timestamp
+//   - updatedAt: timestamp (optional) - last update timestamp
+//
+// Subcollection: /users/{userId}/links/{linkId}
+// Document ID: {linkId} (auto-generated ID)
+// Fields:
+//   - title: string (required, 1..200 chars) - link display title
+//   - url: string (required, 1..2048 chars, http/https/mailto) - destination URL
+//   - subtitle: string (optional, 0..500 chars) - link subtitle description
+//   - meta: string (optional, 0..100 chars) - link badge/meta text
+//   - icon: string (optional, 1..50 chars) - icon identifier
+//   - enabled: bool (optional) - whether the link is active
+//   - isHighlight: bool (optional) - whether the link is highlighted
+//   - clickCount: number (optional, >= 0) - atomic click counter
+//   - createdAt: timestamp (optional, immutable once set) - creation timestamp
+//   - updatedAt: timestamp (optional) - last update timestamp
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns the resource path
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verify UID hasn't been tampered with on create
+    function uidUnchanged(userId) {
+      return !('uid' in request.resource.data) ||
+        (request.resource.data.uid is string && request.resource.data.uid == userId);
+    }
+
+    // Ensure uid field is not modified on update
+    function uidNotModified(userId) {
+      return !('uid' in request.resource.data) ||
+        (
+          request.resource.data.uid is string &&
+          request.resource.data.uid == userId &&
+          (!('uid' in resource.data) || request.resource.data.uid == resource.data.uid)
+        );
+    }
+
+    // Validate required fields exist on the resulting document
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate optional string field with min and max length
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+        (
+          request.resource.data[field] is string &&
+          request.resource.data[field].size() >= minLen &&
+          request.resource.data[field].size() <= maxLen
+        );
+    }
+
+    // Validate URL format (supports http://, https://, and mailto:)
+    function isValidUrl(url) {
+      return url is string &&
+        url.size() >= 1 &&
+        url.size() <= 2048 &&
+        (
+          url.matches("^https://.*") ||
+          url.matches("^http://.*") ||
+          url.matches("^mailto:.*")
+        );
+    }
+
+    // Ensure createdAt is not modified once set
+    function createdAtUnchanged() {
+      return !('createdAt' in resource.data) ||
+        (
+          'createdAt' in request.resource.data &&
+          request.resource.data.createdAt == resource.data.createdAt
+        );
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUserProfile(data, userId) {
+      let allowedFields = [
+        'uid',
+        'username',
+        'displayName',
+        'bio',
+        'avatarUrl',
+        'email',
+        'createdAt',
+        'updatedAt'
+      ];
+      return hasOnlyAllowedFields(allowedFields) &&
+        uidUnchanged(userId) &&
+        isValidOptionalString('username', 1, 100) &&
+        isValidOptionalString('displayName', 1, 100) &&
+        isValidOptionalString('bio', 0, 1000) &&
+        isValidOptionalString('avatarUrl', 0, 2048) &&
+        isValidOptionalString('email', 0, 320) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    function isValidLink(data) {
+      let allowedFields = [
+        'title',
+        'url',
+        'subtitle',
+        'meta',
+        'icon',
+        'enabled',
+        'isHighlight',
+        'clickCount',
+        'createdAt',
+        'updatedAt'
+      ];
+      return hasOnlyAllowedFields(allowedFields) &&
+        hasRequiredFields(['title', 'url']) &&
+        data.title is string &&
+        data.title.size() >= 1 &&
+        data.title.size() <= 200 &&
+        isValidUrl(data.url) &&
+        isValidOptionalString('subtitle', 0, 500) &&
+        isValidOptionalString('meta', 0, 100) &&
+        isValidOptionalString('icon', 1, 50) &&
+        (!('enabled' in data) || data.enabled is bool) &&
+        (!('isHighlight' in data) || data.isHighlight is bool) &&
+        (!('clickCount' in data) || (data.clickCount is number && data.clickCount >= 0)) &&
+        (!('createdAt' in data) || data.createdAt is timestamp) &&
+        (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+
+    // Allow public visitors to atomically increment clickCount by +1
+    function isValidPublicClickIncrement() {
+      let affected = request.resource.data.diff(resource.data).affectedKeys();
+      return affected.hasOnly(['clickCount', 'updatedAt']) &&
+        'clickCount' in request.resource.data &&
+        request.resource.data.clickCount is number &&
+        request.resource.data.clickCount == resource.data.get('clickCount', 0) + 1 &&
+        (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Public read access for resolving user profiles on /[username]
+      allow read: if true;
+
+      // Only the authenticated owner can create, update, or delete their profile
+      allow create: if isOwner(userId) &&
+        isValidUserProfile(request.resource.data, userId);
+
+      allow update: if isOwner(userId) &&
+        isValidUserProfile(request.resource.data, userId) &&
+        uidNotModified(userId) &&
+        createdAtUnchanged();
+
+      allow delete: if isOwner(userId);
+
+      match /links/{linkId} {
+        // Public read access for displaying user links on /[username]
+        allow read: if true;
+
+        // Only the authenticated owner can create or delete links
+        allow create: if isOwner(userId) &&
+          isValidLink(request.resource.data);
+
+        // Authenticated owner can update link details; any visitor can increment clickCount by +1
+        allow update: if (
+          isOwner(userId) &&
+          isValidLink(request.resource.data) &&
+          createdAtUnchanged()
+        ) || isValidPublicClickIncrement();
+
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Default deny for all other collections and paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

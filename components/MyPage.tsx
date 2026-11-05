@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { Loader2 } from "lucide-react"
+import { Loader2, Pencil } from "lucide-react"
 import type { User } from "firebase/auth"
 import { AddLinkDialog } from "@/components/add-link-dialog"
+import { ClickStatsSection } from "@/components/ClickStatsSection"
 import { LinkCard } from "@/components/LinkCard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,8 +20,11 @@ import { DEFAULT_LINKS, DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
 import {
   createFirestoreLink,
   deleteFirestoreLink,
+  ensureUserDocument,
   fetchFirestoreLinks,
+  incrementClickCount,
   updateFirestoreLink,
+  updateUserProfile,
 } from "@/lib/links-service"
 import type { NewLinkInput } from "@/lib/store"
 
@@ -32,24 +36,55 @@ export interface MyPageProps {
 
 export function MyPage({ user }: MyPageProps) {
   const [profile] = React.useState(DEFAULT_PROFILE)
+
+  // 인라인 편집용 displayName / bio 상태 (낙관적 즉시 반영)
+  const initialDisplayName = user.displayName || profile.name
+  const [displayName, setDisplayName] = React.useState(initialDisplayName)
+  const [bio, setBio] = React.useState(profile.bio)
+
+  const [isEditingName, setIsEditingName] = React.useState(false)
+  const [nameDraft, setNameDraft] = React.useState(initialDisplayName)
+  const [isEditingBio, setIsEditingBio] = React.useState(false)
+  const [bioDraft, setBioDraft] = React.useState(profile.bio)
+
+  const nameInputRef = React.useRef<HTMLInputElement>(null)
+  const bioInputRef = React.useRef<HTMLTextAreaElement>(null)
+
   const [defaultLinks, setDefaultLinks] =
     React.useState<LinkItem[]>(DEFAULT_LINKS)
   const [firestoreLinks, setFirestoreLinks] = React.useState<LinkItem[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
 
   React.useEffect(() => {
-    // 로그인한 사용자의 users/{userId}/links 컬렉션을 최초 1회 조회 (createdAt 최신순 정렬)
+    // 로그인한 사용자의 users/{userId} 프로필 문서와 users/{userId}/links 컬렉션을 최초 1회 조회
     let isMounted = true
     setIsLoading(true)
 
-    fetchFirestoreLinks(user.uid)
-      .then((loadedLinks) => {
-        if (isMounted) {
-          setFirestoreLinks(loadedLinks)
-        }
-      })
-      .catch((error) => {
-        console.error("Firestore 링크 조회 오류:", error)
+    Promise.all([
+      ensureUserDocument(user).catch((err) => {
+        console.error("Firestore 프로필 조회/초기화 오류:", err)
+        return null
+      }),
+      fetchFirestoreLinks(user.uid).catch((err) => {
+        console.error("Firestore 링크 조회 오류:", err)
+        return [] as LinkItem[]
+      }),
+    ])
+      .then(([loadedProfile, loadedLinks]) => {
+        if (!isMounted) return
+
+        const resolvedName =
+          loadedProfile?.displayName?.trim() ||
+          user.displayName ||
+          profile.name
+        const resolvedBio =
+          loadedProfile?.bio !== undefined ? loadedProfile.bio : profile.bio
+
+        setDisplayName(resolvedName)
+        setNameDraft(resolvedName)
+        setBio(resolvedBio)
+        setBioDraft(resolvedBio)
+        setFirestoreLinks(loadedLinks)
       })
       .finally(() => {
         if (isMounted) {
@@ -60,7 +95,70 @@ export function MyPage({ user }: MyPageProps) {
     return () => {
       isMounted = false
     }
-  }, [user.uid])
+  }, [user.uid, user.displayName, profile.name, profile.bio])
+
+  React.useEffect(() => {
+    if (isEditingName) {
+      nameInputRef.current?.focus()
+      nameInputRef.current?.select()
+    }
+  }, [isEditingName])
+
+  React.useEffect(() => {
+    if (isEditingBio) {
+      bioInputRef.current?.focus()
+      const len = bioInputRef.current?.value.length ?? 0
+      bioInputRef.current?.setSelectionRange(len, len)
+    }
+  }, [isEditingBio])
+
+  const commitDisplayName = async () => {
+    setIsEditingName(false)
+    const nextName = nameDraft.trim()
+
+    // 빈 문자열이거나 기존 값과 동일하면 서버 업데이트를 건너뛰고 원래 값 복구
+    if (!nextName || nextName === displayName) {
+      setNameDraft(displayName)
+      return
+    }
+
+    const previousName = displayName
+    // UI 반응성을 위해 로컬 상태에 즉시 반영 (Optimistic Update)
+    setDisplayName(nextName)
+    setNameDraft(nextName)
+
+    try {
+      await updateUserProfile(user.uid, { displayName: nextName })
+    } catch (error) {
+      console.error("프로필 이름 업데이트 오류:", error)
+      setDisplayName(previousName)
+      setNameDraft(previousName)
+    }
+  }
+
+  const commitBio = async () => {
+    setIsEditingBio(false)
+    const nextBio = bioDraft.trim()
+
+    // 빈 문자열이거나 기존 값과 동일하면 서버 업데이트를 건너뛰고 원래 값 복구
+    if (!nextBio || nextBio === bio) {
+      setBioDraft(bio)
+      return
+    }
+
+    const previousBio = bio
+    // UI 반응성을 위해 로컬 상태에 즉시 반영 (Optimistic Update)
+    setBio(nextBio)
+    setBioDraft(nextBio)
+
+    try {
+      await updateUserProfile(user.uid, { bio: nextBio })
+    } catch (error) {
+      console.error("프로필 소개글 업데이트 오류:", error)
+      setBio(previousBio)
+      setBioDraft(previousBio)
+    }
+  }
 
   const handleAddLink = async (input: NewLinkInput) => {
     setIsLoading(true)
@@ -77,24 +175,21 @@ export function MyPage({ user }: MyPageProps) {
     id: string,
     updates: { title: string; url: string }
   ) => {
-    if (!DEFAULT_LINK_IDS.has(id)) {
-      await updateFirestoreLink(user.uid, id, updates)
-      setFirestoreLinks((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, title: updates.title, url: updates.url }
-            : item
-        )
+    await updateFirestoreLink(user.uid, id, updates)
+    setFirestoreLinks((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, title: updates.title, url: updates.url }
+          : item
       )
-    } else {
-      setDefaultLinks((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, title: updates.title, url: updates.url }
-            : item
-        )
+    )
+    setDefaultLinks((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, title: updates.title, url: updates.url }
+          : item
       )
-    }
+    )
   }
 
   const handleDeleteLink = async (id: string) => {
@@ -106,11 +201,38 @@ export function MyPage({ user }: MyPageProps) {
     }
   }
 
-  const displayName = user.displayName || profile.name
+  const handleLinkClick = async (id: string) => {
+    if (!user?.uid) {
+      console.error("클릭 카운트 저장 실패: 로그인이 필요합니다.")
+      return
+    }
+
+    setFirestoreLinks((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, clickCount: (item.clickCount ?? 0) + 1 }
+          : item
+      )
+    )
+    setDefaultLinks((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, clickCount: (item.clickCount ?? 0) + 1 }
+          : item
+      )
+    )
+
+    await incrementClickCount(user.uid, id)
+  }
+
   const avatarUrl = user.photoURL || profile.avatarUrl
 
-  // 새로 추가된 Firestore 링크(createdAt 최신순)를 상단에 배치하고 기본 링크와 함께 표시
-  const allLinks = [...firestoreLinks, ...defaultLinks]
+  // Firestore에 이미 저장된 기본 링크 ID는 중복 표시되지 않도록 필터링하고 최신 데이터를 우선 사용
+  const existingFirestoreIds = new Set(firestoreLinks.map((item) => item.id))
+  const remainingDefaultLinks = defaultLinks.filter(
+    (item) => !existingFirestoreIds.has(item.id)
+  )
+  const allLinks = [...firestoreLinks, ...remainingDefaultLinks]
   const enabledLinks = allLinks.filter((link) => link.enabled)
 
   return (
@@ -139,15 +261,83 @@ export function MyPage({ user }: MyPageProps) {
           />
         </div>
 
-        {/* 이름: TDS h2 */}
-        <h1 className="text-[24px] font-bold leading-[1.3] tracking-[-0.02em] text-[var(--tds-grey-900)]">
-          {displayName}
-        </h1>
+        {/* 이름(displayName): 클릭 시 인라인 편집, Enter 또는 포커스 아웃 시 저장 */}
+        <div className="flex w-full max-w-[280px] flex-col items-center">
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              type="text"
+              aria-label="표시 이름 수정"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitDisplayName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                } else if (e.key === "Escape") {
+                  setNameDraft(displayName)
+                  setIsEditingName(false)
+                }
+              }}
+              className="w-full rounded-[10px] border border-[var(--tds-blue-500)] bg-[var(--tds-white)] px-3 py-1 text-center text-[24px] font-bold leading-[1.3] tracking-[-0.02em] text-[var(--tds-grey-900)] ring-2 ring-[var(--tds-blue-500)]/20 outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              title="클릭하여 이름 수정"
+              onClick={() => {
+                setNameDraft(displayName)
+                setIsEditingName(true)
+              }}
+              className="group inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-0.5 transition-colors hover:bg-[var(--tds-grey-100)]"
+            >
+              <h1 className="text-[24px] font-bold leading-[1.3] tracking-[-0.02em] text-[var(--tds-grey-900)]">
+                {displayName}
+              </h1>
+              <Pencil className="size-3.5 text-[var(--tds-grey-400)] opacity-60 transition-opacity group-hover:text-[var(--tds-blue-500)] group-hover:opacity-100" />
+            </button>
+          )}
+        </div>
 
-        {/* 소개글: TDS body-2 + 해요체 보이스 */}
-        <p className="mt-2.5 max-w-[320px] whitespace-pre-line text-[15px] font-normal leading-[1.5] tracking-[-0.005em] text-[var(--tds-grey-700)]">
-          {profile.bio}
-        </p>
+        {/* 소개글(bio): 클릭 시 인라인 편집, Enter 또는 포커스 아웃 시 저장 */}
+        <div className="mt-2.5 flex w-full max-w-[340px] flex-col items-center">
+          {isEditingBio ? (
+            <textarea
+              ref={bioInputRef}
+              rows={2}
+              aria-label="소개글 수정"
+              value={bioDraft}
+              onChange={(e) => setBioDraft(e.target.value)}
+              onBlur={commitBio}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  e.currentTarget.blur()
+                } else if (e.key === "Escape") {
+                  setBioDraft(bio)
+                  setIsEditingBio(false)
+                }
+              }}
+              className="w-full resize-none rounded-[12px] border border-[var(--tds-blue-500)] bg-[var(--tds-white)] px-3 py-2 text-center text-[15px] font-normal leading-[1.5] tracking-[-0.005em] text-[var(--tds-grey-800)] ring-2 ring-[var(--tds-blue-500)]/20 outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              title="클릭하여 소개글 수정"
+              onClick={() => {
+                setBioDraft(bio)
+                setIsEditingBio(true)
+              }}
+              className="group inline-flex items-center gap-1.5 rounded-[12px] px-3 py-1 transition-colors hover:bg-[var(--tds-grey-100)]"
+            >
+              <p className="whitespace-pre-line text-center text-[15px] font-normal leading-[1.5] tracking-[-0.005em] text-[var(--tds-grey-700)]">
+                {bio}
+              </p>
+              <Pencil className="size-3.5 shrink-0 text-[var(--tds-grey-400)] opacity-60 transition-opacity group-hover:text-[var(--tds-blue-500)] group-hover:opacity-100" />
+            </button>
+          )}
+        </div>
 
         {/* 요약 지표 (Tabular figures 적용) */}
         <div className="mt-6 grid w-full grid-cols-3 divide-x divide-[var(--tds-grey-200)] rounded-[16px] border border-[var(--tds-grey-200)] bg-[var(--tds-grey-50)] py-3.5">
@@ -232,6 +422,7 @@ export function MyPage({ user }: MyPageProps) {
             <LinkCard
               key={item.id}
               item={item}
+              onLinkClick={handleLinkClick}
               onUpdateLink={handleUpdateLink}
               onDeleteLink={handleDeleteLink}
             />
@@ -239,7 +430,16 @@ export function MyPage({ user }: MyPageProps) {
         </CardContent>
       </Card>
 
-      {/* 섹션 3: Bottom-Info + 화면당 단 하나뿐인 Primary CTA */}
+      {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
+      <div className="h-3 w-full sm:hidden" />
+
+      {/* 섹션 3: 클릭 통계 섹션 (총 클릭수 & 링크별 클릭수 내림차순 정렬) */}
+      <ClickStatsSection links={enabledLinks} />
+
+      {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
+      <div className="h-3 w-full sm:hidden" />
+
+      {/* 섹션 4: Bottom-Info + 화면당 단 하나뿐인 Primary CTA */}
       <Card
         suppressHydrationWarning
         className="mt-auto items-center px-6 pt-4 pb-8 sm:py-6"

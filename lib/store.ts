@@ -42,6 +42,7 @@ export const useProfileStore = create<MyLinkStep1State>()(
               icon: input.icon,
               enabled: true,
               isHighlight: Boolean(input.isHighlight),
+              clickCount: 0,
             },
           ],
         })),

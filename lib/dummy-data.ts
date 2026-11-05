@@ -14,6 +14,7 @@ export interface LinkItem {
   icon: IconName;
   enabled: boolean;
   isHighlight?: boolean;
+  clickCount: number;
 }
 
 export interface ProfileData {
@@ -48,6 +49,7 @@ export const DEFAULT_LINKS: LinkItem[] = [
     icon: "github",
     enabled: true,
     isHighlight: true,
+    clickCount: 0,
   },
   {
     id: "link-projects",
@@ -58,6 +60,7 @@ export const DEFAULT_LINKS: LinkItem[] = [
     icon: "folder",
     enabled: true,
     isHighlight: false,
+    clickCount: 0,
   },
   {
     id: "link-blog",
@@ -68,6 +71,7 @@ export const DEFAULT_LINKS: LinkItem[] = [
     icon: "book",
     enabled: true,
     isHighlight: false,
+    clickCount: 0,
   },
   {
     id: "link-portfolio",
@@ -78,6 +82,7 @@ export const DEFAULT_LINKS: LinkItem[] = [
     icon: "globe",
     enabled: true,
     isHighlight: false,
+    clickCount: 0,
   },
   {
     id: "link-email",
@@ -88,5 +93,6 @@ export const DEFAULT_LINKS: LinkItem[] = [
     icon: "mail",
     enabled: true,
     isHighlight: false,
+    clickCount: 0,
   },
 ];

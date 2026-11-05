@@ -97,6 +97,8 @@ function renderLinkIcon(icon: IconName) {
 
 export interface LinkCardProps {
   item: LinkItem
+  readOnly?: boolean
+  onLinkClick?: (id: string) => Promise<void> | void
   onUpdateLink?: (
     id: string,
     updates: { title: string; url: string }
@@ -107,6 +109,8 @@ export interface LinkCardProps {
 
 export function LinkCard({
   item,
+  readOnly = false,
+  onLinkClick,
   onUpdateLink,
   onDeleteLink,
   className,
@@ -122,6 +126,10 @@ export function LinkCard({
   const cardRef = React.useRef<HTMLDivElement>(null)
 
   const isExternal = item.url.startsWith("http")
+
+  const handleClick = () => {
+    void onLinkClick?.(item.id)
+  }
 
   // 카드 바깥 영역을 클릭/터치하면 펼쳐진 액션 버튼을 자동으로 숨김
   React.useEffect(() => {
@@ -307,11 +315,12 @@ export function LinkCard({
         className
       )}
     >
-      {/* 좌측 링크 본문 영역: 클릭 시 기존처럼 URL로 이동 */}
+      {/* 좌측 링크 본문 영역: 클릭 시 새 탭(target="_blank")으로 이동하며 클릭 카운트 증가 */}
       <a
         href={item.url}
-        target={isExternal ? "_blank" : undefined}
-        rel={isExternal ? "noopener noreferrer" : undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={handleClick}
         className="flex min-w-0 flex-1 items-center justify-between pr-1"
       >
         <div className="flex min-w-0 items-center gap-[14px]">
@@ -359,65 +368,67 @@ export function LinkCard({
         </div>
       </a>
 
-      {/* 우측 액션 영역: 본문과 세로 막대기(border-l)로 칸을 나누고, 더보기(⋮) 버튼은 평상시에도 항상 노출 */}
-      <div className="ml-2.5 flex shrink-0 items-center border-l border-[var(--tds-grey-200)] pl-2.5">
-        <div
-          className={cn(
-            "flex items-center gap-1 overflow-hidden transition-all duration-200 ease-out",
-            showActions
-              ? "mr-1 max-w-[80px] translate-x-0 opacity-100 pointer-events-auto"
-              : "max-w-0 translate-x-2 opacity-0 pointer-events-none"
-          )}
-        >
+      {/* 우측 액션 영역: readOnly가 아닐 때만 표시 */}
+      {!readOnly ? (
+        <div className="ml-2.5 flex shrink-0 items-center border-l border-[var(--tds-grey-200)] pl-2.5">
+          <div
+            className={cn(
+              "flex items-center gap-1 overflow-hidden transition-all duration-200 ease-out",
+              showActions
+                ? "mr-1 max-w-[80px] translate-x-0 opacity-100 pointer-events-auto"
+                : "max-w-0 translate-x-2 opacity-0 pointer-events-none"
+            )}
+          >
+            <Button
+              type="button"
+              variant="tdsIcon"
+              size="icon"
+              aria-label={`${item.title} 수정`}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleStartEdit()
+              }}
+              className="size-8 rounded-[10px] text-[var(--tds-grey-600)] hover:bg-[var(--tds-blue-50)] hover:text-[var(--tds-blue-500)]"
+            >
+              <Pencil className="size-4" />
+            </Button>
+
+            <DeleteLinkDialog
+              linkTitle={item.title}
+              onConfirmDelete={async () => {
+                await onDeleteLink?.(item.id)
+                setShowActions(false)
+              }}
+            />
+          </div>
+
+          {/* 평상시에도 항상 보이는 더보기(⋮) 버튼 */}
           <Button
             type="button"
             variant="tdsIcon"
             size="icon"
-            aria-label={`${item.title} 수정`}
+            aria-expanded={showActions}
+            aria-label={
+              showActions ? "관리 메뉴 닫기" : `${item.title} 관리 메뉴 열기`
+            }
             onClick={(e) => {
+              e.preventDefault()
               e.stopPropagation()
-              handleStartEdit()
+              setShowActions((prev) => !prev)
             }}
-            className="size-8 rounded-[10px] text-[var(--tds-grey-600)] hover:bg-[var(--tds-blue-50)] hover:text-[var(--tds-blue-500)]"
+            className={cn(
+              "size-8 rounded-[10px] text-[var(--tds-grey-500)] transition-colors hover:bg-[var(--tds-grey-100)] hover:text-[var(--tds-grey-800)]",
+              showActions && "bg-[var(--tds-grey-100)] text-[var(--tds-grey-900)]"
+            )}
           >
-            <Pencil className="size-4" />
+            {showActions ? (
+              <X className="size-4" />
+            ) : (
+              <MoreVertical className="size-4" />
+            )}
           </Button>
-
-          <DeleteLinkDialog
-            linkTitle={item.title}
-            onConfirmDelete={async () => {
-              await onDeleteLink?.(item.id)
-              setShowActions(false)
-            }}
-          />
         </div>
-
-        {/* 평상시에도 항상 보이는 더보기(⋮) 버튼 */}
-        <Button
-          type="button"
-          variant="tdsIcon"
-          size="icon"
-          aria-expanded={showActions}
-          aria-label={
-            showActions ? "관리 메뉴 닫기" : `${item.title} 관리 메뉴 열기`
-          }
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            setShowActions((prev) => !prev)
-          }}
-          className={cn(
-            "size-8 rounded-[10px] text-[var(--tds-grey-500)] transition-colors hover:bg-[var(--tds-grey-100)] hover:text-[var(--tds-grey-800)]",
-            showActions && "bg-[var(--tds-grey-100)] text-[var(--tds-grey-900)]"
-          )}
-        >
-          {showActions ? (
-            <X className="size-4" />
-          ) : (
-            <MoreVertical className="size-4" />
-          )}
-        </Button>
-      </div>
+      ) : null}
     </div>
   )
 }

@@ -3,7 +3,6 @@
 import * as React from "react"
 import {
   onAuthStateChanged,
-  signInWithPopup,
   signOut,
   type User,
 } from "firebase/auth"
@@ -12,7 +11,11 @@ import { AuthHeader } from "@/components/AuthHeader"
 import { LandingPage } from "@/components/LandingPage"
 import { MyPage } from "@/components/MyPage"
 import { Card } from "@/components/ui/card"
-import { auth, googleProvider } from "@/lib/firebase"
+import {
+  auth,
+  resolveGoogleRedirectResult,
+  signInWithGoogle,
+} from "@/lib/firebase"
 
 export default function Home() {
   const [user, setUser] = React.useState<User | null>(null)
@@ -20,8 +23,10 @@ export default function Home() {
   const [isSigningIn, setIsSigningIn] = React.useState(false)
   const [authError, setAuthError] = React.useState("")
 
-  // onAuthStateChanged를 사용하여 새로고침 시에도 로그인 세션 유지
+  // onAuthStateChanged를 사용하여 새로고침 및 리다이렉트 로그인 복귀 시에도 세션 유지
   React.useEffect(() => {
+    resolveGoogleRedirectResult()
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setIsAuthLoading(false)
@@ -31,15 +36,17 @@ export default function Home() {
   }, [])
 
   const handleSignInWithGoogle = async () => {
+    setAuthError("")
+    // 사용자 클릭 제스처 유지를 위해 상태 변경보다 signInWithGoogle() 호출을 먼저 시작
+    const signInPromise = signInWithGoogle()
+    setIsSigningIn(true)
     try {
-      setIsSigningIn(true)
-      setAuthError("")
-      await signInWithPopup(auth, googleProvider)
+      await signInPromise
     } catch (err) {
       console.error("Google 로그인 오류:", err)
       setAuthError(
         err instanceof Error
-          ? `로그인에 실패했어요: ${err.message}`
+          ? `로그인에 실패했어요: ${err.message} (브라우저 주소창 우측의 팝업 차단을 해제해 주세요)`
           : "Google 로그인 중 문제가 발생했어요."
       )
     } finally {
