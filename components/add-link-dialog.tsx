@@ -43,7 +43,7 @@ function isValidHttpUrl(value: string): boolean {
 }
 
 export interface AddLinkDialogProps {
-  onAddLink: (newLink: NewLinkInput) => void
+  onAddLink: (newLink: NewLinkInput) => Promise<void> | void
 }
 
 export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
@@ -56,6 +56,8 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
   const [isHighlight, setIsHighlight] = React.useState(false)
   const [titleError, setTitleError] = React.useState("")
   const [urlError, setUrlError] = React.useState("")
+  const [submitError, setSubmitError] = React.useState("")
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
 
   const resetForm = () => {
     setTitle("")
@@ -66,6 +68,8 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
     setIsHighlight(false)
     setTitleError("")
     setUrlError("")
+    setSubmitError("")
+    setIsSubmitting(false)
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -75,7 +79,7 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     let isValid = true
@@ -98,17 +102,29 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
       return
     }
 
-    onAddLink({
-      title: title.trim(),
-      subtitle: subtitle.trim() || "클릭하면 해당 채널로 이동해요",
-      url: url.trim(),
-      meta: meta.trim() || "링크",
-      icon,
-      isHighlight,
-    })
+    try {
+      setIsSubmitting(true)
+      setSubmitError("")
 
-    setOpen(false)
-    resetForm()
+      await onAddLink({
+        title: title.trim(),
+        subtitle: subtitle.trim() || "클릭하면 해당 채널로 이동해요",
+        url: url.trim(),
+        meta: meta.trim() || "링크",
+        icon,
+        isHighlight,
+      })
+
+      setOpen(false)
+      resetForm()
+    } catch (err) {
+      setIsSubmitting(false)
+      setSubmitError(
+        err instanceof Error
+          ? `저장에 실패했어요: ${err.message}`
+          : "링크를 저장하는 중 문제가 발생했어요."
+      )
+    }
   }
 
   return (
@@ -282,6 +298,12 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
             </div>
           </div>
 
+          {submitError ? (
+            <p className="text-[13px] font-medium text-[var(--tds-red-500)]">
+              {submitError}
+            </p>
+          ) : null}
+
           <DialogFooter className="mt-1 gap-2">
             <DialogClose
               render={
@@ -289,6 +311,7 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
                   type="button"
                   variant="tdsGhost"
                   size="tdsMd"
+                  disabled={isSubmitting}
                   className="bg-[var(--tds-grey-100)] text-[var(--tds-grey-700)]"
                 />
               }
@@ -299,9 +322,10 @@ export function AddLinkDialog({ onAddLink }: AddLinkDialogProps) {
               type="submit"
               variant="tdsPrimary"
               size="tdsMd"
+              disabled={isSubmitting}
               className="px-5"
             >
-              추가하기
+              {isSubmitting ? "저장 중..." : "추가하기"}
             </Button>
           </DialogFooter>
         </form>

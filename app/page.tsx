@@ -14,27 +14,35 @@ import {
 } from "@/components/ui/card"
 import { LinkCardItem } from "@/components/link-card-item"
 import { DEFAULT_LINKS, DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
+import {
+  createFirestoreLink,
+  subscribeFirestoreLinks,
+} from "@/lib/links-service"
 import type { NewLinkInput } from "@/lib/store"
 
 export default function Home() {
   const [profile] = React.useState(DEFAULT_PROFILE)
-  const [links, setLinks] = React.useState<LinkItem[]>(DEFAULT_LINKS)
+  const [firestoreLinks, setFirestoreLinks] = React.useState<LinkItem[]>([])
 
-  const handleAddLink = (input: NewLinkInput) => {
-    const newItem: LinkItem = {
-      id: `link-${Date.now()}`,
-      title: input.title,
-      subtitle: input.subtitle,
-      meta: input.meta,
-      url: input.url,
-      icon: input.icon,
-      enabled: true,
-      isHighlight: Boolean(input.isHighlight),
-    }
-    setLinks((prev) => [...prev, newItem])
+  React.useEffect(() => {
+    const unsubscribe = subscribeFirestoreLinks(
+      (loadedLinks) => {
+        setFirestoreLinks(loadedLinks)
+      },
+      (error) => {
+        console.error("Firestore 링크 구독 오류:", error)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [])
+
+  const handleAddLink = async (input: NewLinkInput) => {
+    await createFirestoreLink(input)
   }
 
-  const enabledLinks = links.filter((link) => link.enabled)
+  const allLinks = [...DEFAULT_LINKS, ...firestoreLinks]
+  const enabledLinks = allLinks.filter((link) => link.enabled)
 
   return (
     <main
