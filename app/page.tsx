@@ -16,32 +16,53 @@ import { LinkCardItem } from "@/components/link-card-item"
 import { DEFAULT_LINKS, DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
 import {
   createFirestoreLink,
-  subscribeFirestoreLinks,
+  fetchFirestoreLinks,
 } from "@/lib/links-service"
 import type { NewLinkInput } from "@/lib/store"
 
 export default function Home() {
   const [profile] = React.useState(DEFAULT_PROFILE)
   const [firestoreLinks, setFirestoreLinks] = React.useState<LinkItem[]>([])
+  const [isLoading, setIsLoading] = React.useState(true)
 
   React.useEffect(() => {
-    const unsubscribe = subscribeFirestoreLinks(
-      (loadedLinks) => {
-        setFirestoreLinks(loadedLinks)
-      },
-      (error) => {
-        console.error("Firestore 링크 구독 오류:", error)
-      }
-    )
+    // 페이지 최초 마운트 시 getDocs로 1회 조회 (createdAt 최신순 정렬)
+    let isMounted = true
+    setIsLoading(true)
 
-    return () => unsubscribe()
+    fetchFirestoreLinks()
+      .then((loadedLinks) => {
+        if (isMounted) {
+          setFirestoreLinks(loadedLinks)
+        }
+      })
+      .catch((error) => {
+        console.error("Firestore 링크 조회 오류:", error)
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const handleAddLink = async (input: NewLinkInput) => {
-    await createFirestoreLink(input)
+    setIsLoading(true)
+    try {
+      // Firestore에 저장 후 반환된 새 링크를 클라이언트 상태 최상단(최신순)에 즉시 동기화
+      const createdLink = await createFirestoreLink(input)
+      setFirestoreLinks((prev) => [createdLink, ...prev])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const allLinks = [...DEFAULT_LINKS, ...firestoreLinks]
+  // 새로 추가된 Firestore 링크(createdAt 최신순)를 상단에 배치하고 기본 링크와 함께 표시
+  const allLinks = [...firestoreLinks, ...DEFAULT_LINKS]
   const enabledLinks = allLinks.filter((link) => link.enabled)
 
   return (
@@ -176,13 +197,51 @@ export default function Home() {
         {/* 섹션 2: 멀티링크 리스트 (Card + LinkCardItem) */}
         <Card suppressHydrationWarning className="pt-6 pb-4">
           <CardHeader>
-            <CardTitle>한번에 둘러보기</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>한번에 둘러보기</CardTitle>
+              {isLoading ? (
+                <span className="inline-flex items-center gap-1.5 rounded-[999px] bg-[var(--tds-blue-50)] px-2.5 py-0.5 text-[12px] font-semibold text-[var(--tds-blue-500)]">
+                  <svg
+                    className="size-3 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                    />
+                    <path
+                      className="opacity-90"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  불러오는 중...
+                </span>
+              ) : null}
+            </div>
             <CardDescription className="tabular-nums">
               채널 {enabledLinks.length}개
             </CardDescription>
           </CardHeader>
 
           <CardContent className="divide-y divide-[var(--tds-grey-200)]/60">
+            {isLoading && firestoreLinks.length === 0 ? (
+              <div className="flex min-h-[72px] w-full animate-pulse items-center justify-between px-6 py-[14px]">
+                <div className="flex items-center gap-[14px]">
+                  <div className="h-[44px] w-[44px] rounded-[14px] bg-[var(--tds-grey-100)]" />
+                  <div className="flex flex-col gap-2">
+                    <div className="h-4 w-32 rounded-md bg-[var(--tds-grey-100)]" />
+                    <div className="h-3 w-48 rounded-md bg-[var(--tds-grey-100)]" />
+                  </div>
+                </div>
+                <div className="h-4 w-10 rounded-md bg-[var(--tds-grey-100)]" />
+              </div>
+            ) : null}
             {enabledLinks.map((item) => (
               <LinkCardItem key={item.id} item={item} />
             ))}
