@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
+import { AddLinkDialog } from "@/components/add-link-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,24 +13,27 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { LinkCardItem } from "@/components/link-card-item"
-import { DEFAULT_LINKS, DEFAULT_PROFILE } from "@/lib/dummy-data"
-import { useProfileStore } from "@/lib/store"
+import { DEFAULT_LINKS, DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
+import type { NewLinkInput } from "@/lib/store"
 
 export default function Home() {
-  const storeProfile = useProfileStore((state) => state.profile)
-  const storeLinks = useProfileStore((state) => state.links)
-  const resetToDefault = useProfileStore((state) => state.resetToDefault)
-  const [mounted, setMounted] = React.useState(false)
+  const [profile] = React.useState(DEFAULT_PROFILE)
+  const [links, setLinks] = React.useState<LinkItem[]>(DEFAULT_LINKS)
 
-  React.useEffect(() => {
-    if (!window.localStorage.getItem("mylink_profile_v1")) {
-      resetToDefault()
+  const handleAddLink = (input: NewLinkInput) => {
+    const newItem: LinkItem = {
+      id: `link-${Date.now()}`,
+      title: input.title,
+      subtitle: input.subtitle,
+      meta: input.meta,
+      url: input.url,
+      icon: input.icon,
+      enabled: true,
+      isHighlight: Boolean(input.isHighlight),
     }
-    setMounted(true)
-  }, [resetToDefault])
+    setLinks((prev) => [...prev, newItem])
+  }
 
-  const profile = mounted ? storeProfile : DEFAULT_PROFILE
-  const links = mounted ? storeLinks : DEFAULT_LINKS
   const enabledLinks = links.filter((link) => link.enabled)
 
   return (
@@ -155,6 +159,11 @@ export default function Home() {
 
         {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
         <div className="h-3 w-full sm:hidden" />
+
+        {/* 새로운 링크 추가하기 버튼 영역 (프로필 바로 아래, 목록 위) */}
+        <div className="px-6 py-3 sm:px-0 sm:py-0">
+          <AddLinkDialog onAddLink={handleAddLink} />
+        </div>
 
         {/* 섹션 2: 멀티링크 리스트 (Card + LinkCardItem) */}
         <Card suppressHydrationWarning className="pt-6 pb-4">
