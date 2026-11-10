@@ -24,6 +24,8 @@ import {
 } from "@/lib/dummy-data"
 import type { NewLinkInput } from "@/lib/store"
 
+const DEFAULT_LINK_IDS = new Set(DEFAULT_LINKS.map((item) => item.id))
+
 export interface UserProfileDoc {
   uid: string
   username?: string
@@ -230,15 +232,11 @@ export async function resolveUserByIdentifier(
   }
 
   const firestoreLinks = await fetchFirestoreLinks(resolvedUserId)
-  const existingIds = new Set(firestoreLinks.map((item) => item.id))
-  const remainingDefaultLinks = DEFAULT_LINKS.filter(
-    (item) => !existingIds.has(item.id)
-  )
 
   return {
     userId: resolvedUserId,
     profile: resolvedProfile,
-    links: [...firestoreLinks, ...remainingDefaultLinks],
+    links: firestoreLinks,
   }
 }
 
@@ -281,7 +279,10 @@ export async function fetchFirestoreLinks(userId: string): Promise<LinkItem[]> {
     orderBy("createdAt", "desc")
   )
   const querySnapshot = await getDocs(q)
-  return querySnapshot.docs.map(mapDocToLinkItem)
+  // 기존에 자동 생성되었을 수 있는 기본 더미 링크 ID(link-github 등)는 제외하고 사용자가 직접 추가한 링크만 반환
+  return querySnapshot.docs
+    .filter((docSnap) => !DEFAULT_LINK_IDS.has(docSnap.id))
+    .map(mapDocToLinkItem)
 }
 
 export async function createFirestoreLink(
@@ -333,28 +334,6 @@ export async function incrementClickCount(
 
   try {
     const linkDocRef = doc(db, "users", userId, "links", linkId)
-    const defaultItem = DEFAULT_LINKS.find((item) => item.id === linkId)
-
-    if (defaultItem) {
-      // 기본 링크를 처음 클릭했을 때도 Firestore에 문서가 생성·누적되도록 처리
-      const docSnap = await getDoc(linkDocRef)
-      if (!docSnap.exists()) {
-        await setDoc(linkDocRef, {
-          title: defaultItem.title,
-          url: defaultItem.url,
-          subtitle: defaultItem.subtitle,
-          meta: defaultItem.meta,
-          icon: defaultItem.icon,
-          enabled: defaultItem.enabled,
-          isHighlight: Boolean(defaultItem.isHighlight),
-          clickCount: 1,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        })
-        return
-      }
-    }
-
     await updateDoc(linkDocRef, {
       clickCount: increment(1),
       updatedAt: serverTimestamp(),
@@ -370,27 +349,6 @@ export async function updateFirestoreLink(
   updates: { title: string; url: string }
 ): Promise<void> {
   const linkDocRef = doc(db, "users", userId, "links", id)
-  const defaultItem = DEFAULT_LINKS.find((item) => item.id === id)
-
-  if (defaultItem) {
-    const docSnap = await getDoc(linkDocRef)
-    if (!docSnap.exists()) {
-      await setDoc(linkDocRef, {
-        title: updates.title.trim(),
-        url: updates.url.trim(),
-        subtitle: defaultItem.subtitle,
-        meta: defaultItem.meta,
-        icon: defaultItem.icon,
-        enabled: defaultItem.enabled,
-        isHighlight: Boolean(defaultItem.isHighlight),
-        clickCount: defaultItem.clickCount ?? 0,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
-      return
-    }
-  }
-
   await updateDoc(linkDocRef, {
     title: updates.title.trim(),
     url: updates.url.trim(),

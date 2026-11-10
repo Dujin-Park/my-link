@@ -41,7 +41,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
-import { DEFAULT_LINKS, type LinkItem } from "@/lib/dummy-data"
+import type { LinkItem } from "@/lib/dummy-data"
 import { auth, signInWithGoogle } from "@/lib/firebase"
 import { fetchFirestoreLinks } from "@/lib/links-service"
 import { cn } from "@/lib/utils"
@@ -125,16 +125,11 @@ export default function StatsPage() {
     }
   }
 
-  // Firestore에 저장된 링크와 기본 링크 병합 (중복 ID 제거)
-  const allLinks = React.useMemo(() => {
-    const existingIds = new Set(firestoreLinks.map((item) => item.id))
-    const remainingDefaults = DEFAULT_LINKS.filter(
-      (item) => !existingIds.has(item.id)
-    )
-    return [...firestoreLinks, ...remainingDefaults].filter(
-      (item) => item.enabled
-    )
-  }, [firestoreLinks])
+  // 사용자가 직접 등록한 활성 링크 목록
+  const allLinks = React.useMemo(
+    () => firestoreLinks.filter((item) => item.enabled),
+    [firestoreLinks]
+  )
 
   // 총 클릭수 (모든 링크 합산)
   const totalClicks = React.useMemo(

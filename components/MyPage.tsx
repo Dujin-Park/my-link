@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { Loader2, Pencil } from "lucide-react"
+import { Link2, Loader2, Pencil } from "lucide-react"
 import type { User } from "firebase/auth"
 import { AddLinkDialog } from "@/components/add-link-dialog"
 import { ClickStatsSection } from "@/components/ClickStatsSection"
@@ -16,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { DEFAULT_LINKS, DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
+import { DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
 import {
   createFirestoreLink,
   deleteFirestoreLink,
@@ -27,8 +27,6 @@ import {
   updateUserProfile,
 } from "@/lib/links-service"
 import type { NewLinkInput } from "@/lib/store"
-
-const DEFAULT_LINK_IDS = new Set(DEFAULT_LINKS.map((item) => item.id))
 
 export interface MyPageProps {
   user: User
@@ -50,8 +48,6 @@ export function MyPage({ user }: MyPageProps) {
   const nameInputRef = React.useRef<HTMLInputElement>(null)
   const bioInputRef = React.useRef<HTMLTextAreaElement>(null)
 
-  const [defaultLinks, setDefaultLinks] =
-    React.useState<LinkItem[]>(DEFAULT_LINKS)
   const [firestoreLinks, setFirestoreLinks] = React.useState<LinkItem[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
 
@@ -116,14 +112,12 @@ export function MyPage({ user }: MyPageProps) {
     setIsEditingName(false)
     const nextName = nameDraft.trim()
 
-    // 빈 문자열이거나 기존 값과 동일하면 서버 업데이트를 건너뛰고 원래 값 복구
     if (!nextName || nextName === displayName) {
       setNameDraft(displayName)
       return
     }
 
     const previousName = displayName
-    // UI 반응성을 위해 로컬 상태에 즉시 반영 (Optimistic Update)
     setDisplayName(nextName)
     setNameDraft(nextName)
 
@@ -140,14 +134,12 @@ export function MyPage({ user }: MyPageProps) {
     setIsEditingBio(false)
     const nextBio = bioDraft.trim()
 
-    // 빈 문자열이거나 기존 값과 동일하면 서버 업데이트를 건너뛰고 원래 값 복구
     if (!nextBio || nextBio === bio) {
       setBioDraft(bio)
       return
     }
 
     const previousBio = bio
-    // UI 반응성을 위해 로컬 상태에 즉시 반영 (Optimistic Update)
     setBio(nextBio)
     setBioDraft(nextBio)
 
@@ -163,7 +155,6 @@ export function MyPage({ user }: MyPageProps) {
   const handleAddLink = async (input: NewLinkInput) => {
     setIsLoading(true)
     try {
-      // Firestore users/{userId}/links에 저장 후 반환된 새 링크를 최상단(최신순)에 즉시 동기화
       const createdLink = await createFirestoreLink(user.uid, input)
       setFirestoreLinks((prev) => [createdLink, ...prev])
     } finally {
@@ -183,22 +174,11 @@ export function MyPage({ user }: MyPageProps) {
           : item
       )
     )
-    setDefaultLinks((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, title: updates.title, url: updates.url }
-          : item
-      )
-    )
   }
 
   const handleDeleteLink = async (id: string) => {
-    if (!DEFAULT_LINK_IDS.has(id)) {
-      await deleteFirestoreLink(user.uid, id)
-      setFirestoreLinks((prev) => prev.filter((item) => item.id !== id))
-    } else {
-      setDefaultLinks((prev) => prev.filter((item) => item.id !== id))
-    }
+    await deleteFirestoreLink(user.uid, id)
+    setFirestoreLinks((prev) => prev.filter((item) => item.id !== id))
   }
 
   const handleLinkClick = async (id: string) => {
@@ -214,26 +194,12 @@ export function MyPage({ user }: MyPageProps) {
           : item
       )
     )
-    setDefaultLinks((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, clickCount: (item.clickCount ?? 0) + 1 }
-          : item
-      )
-    )
 
     await incrementClickCount(user.uid, id)
   }
 
   const avatarUrl = user.photoURL || profile.avatarUrl
-
-  // Firestore에 이미 저장된 기본 링크 ID는 중복 표시되지 않도록 필터링하고 최신 데이터를 우선 사용
-  const existingFirestoreIds = new Set(firestoreLinks.map((item) => item.id))
-  const remainingDefaultLinks = defaultLinks.filter(
-    (item) => !existingFirestoreIds.has(item.id)
-  )
-  const allLinks = [...firestoreLinks, ...remainingDefaultLinks]
-  const enabledLinks = allLinks.filter((link) => link.enabled)
+  const enabledLinks = firestoreLinks.filter((link) => link.enabled)
 
   return (
     <div className="flex flex-1 flex-col sm:gap-3">
@@ -242,13 +208,11 @@ export function MyPage({ user }: MyPageProps) {
         suppressHydrationWarning
         className="items-center px-6 pt-8 pb-7 text-center"
       >
-        {/* 직무 Badge */}
         <Badge variant="role" className="mb-4">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--tds-blue-500)]" />
           {profile.badge}
         </Badge>
 
-        {/* Asset (아바타) */}
         <div className="relative mb-5 h-[104px] w-[104px] overflow-hidden rounded-full border border-[var(--tds-grey-200)] bg-[var(--tds-blue-50)]">
           <Image
             src={avatarUrl}
@@ -261,7 +225,6 @@ export function MyPage({ user }: MyPageProps) {
           />
         </div>
 
-        {/* 이름(displayName): 클릭 시 인라인 편집, Enter 또는 포커스 아웃 시 저장 */}
         <div className="flex w-full max-w-[280px] flex-col items-center">
           {isEditingName ? (
             <input
@@ -300,7 +263,6 @@ export function MyPage({ user }: MyPageProps) {
           )}
         </div>
 
-        {/* 소개글(bio): 클릭 시 인라인 편집, Enter 또는 포커스 아웃 시 저장 */}
         <div className="mt-2.5 flex w-full max-w-[340px] flex-col items-center">
           {isEditingBio ? (
             <textarea
@@ -339,7 +301,6 @@ export function MyPage({ user }: MyPageProps) {
           )}
         </div>
 
-        {/* 요약 지표 (Tabular figures 적용) */}
         <div className="mt-6 grid w-full grid-cols-3 divide-x divide-[var(--tds-grey-200)] rounded-[16px] border border-[var(--tds-grey-200)] bg-[var(--tds-grey-50)] py-3.5">
           <div className="flex flex-col items-center">
             <span className="text-[12px] font-medium text-[var(--tds-grey-600)]">
@@ -367,7 +328,6 @@ export function MyPage({ user }: MyPageProps) {
           </div>
         </div>
 
-        {/* 기술 스택 Chip 리스트 */}
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           {profile.chips.map((chip) => (
             <Badge
@@ -380,15 +340,14 @@ export function MyPage({ user }: MyPageProps) {
         </div>
       </Card>
 
-      {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
       <div className="h-3 w-full sm:hidden" />
 
-      {/* 새로운 링크 추가하기 버튼 영역 (프로필 바로 아래, 목록 위) */}
+      {/* 새로운 링크 추가하기 버튼 영역 */}
       <div className="px-6 py-3 sm:px-0 sm:py-0">
         <AddLinkDialog onAddLink={handleAddLink} />
       </div>
 
-      {/* 섹션 2: 멀티링크 리스트 (Card + LinkCard) */}
+      {/* 섹션 2: 멀티링크 리스트 */}
       <Card suppressHydrationWarning className="pt-6 pb-4">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -417,29 +376,40 @@ export function MyPage({ user }: MyPageProps) {
               </div>
               <div className="h-4 w-10 rounded-md bg-[var(--tds-grey-100)]" />
             </div>
-          ) : null}
-          {enabledLinks.map((item) => (
-            <LinkCard
-              key={item.id}
-              item={item}
-              onLinkClick={handleLinkClick}
-              onUpdateLink={handleUpdateLink}
-              onDeleteLink={handleDeleteLink}
-            />
-          ))}
+          ) : enabledLinks.length === 0 ? (
+            <div className="mx-6 my-4 flex flex-col items-center justify-center gap-2 rounded-[16px] border border-dashed border-[var(--tds-grey-200)] py-10 text-center">
+              <div className="flex size-10 items-center justify-center rounded-full bg-[var(--tds-blue-50)] text-[var(--tds-blue-500)]">
+                <Link2 className="size-5" />
+              </div>
+              <p className="text-[15px] font-semibold text-[var(--tds-grey-800)]">
+                아직 등록된 링크가 없어요
+              </p>
+              <p className="text-[13px] text-[var(--tds-grey-500)]">
+                위의 &apos;새로운 링크 추가하기&apos; 버튼을 눌러 첫 링크를 등록해 보세요
+              </p>
+            </div>
+          ) : (
+            enabledLinks.map((item) => (
+              <LinkCard
+                key={item.id}
+                item={item}
+                onLinkClick={handleLinkClick}
+                onUpdateLink={handleUpdateLink}
+                onDeleteLink={handleDeleteLink}
+              />
+            ))
+          )}
         </CardContent>
       </Card>
 
-      {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
       <div className="h-3 w-full sm:hidden" />
 
-      {/* 섹션 3: 클릭 통계 섹션 (총 클릭수 & 링크별 클릭수 내림차순 정렬) */}
+      {/* 섹션 3: 클릭 통계 섹션 */}
       <ClickStatsSection links={enabledLinks} />
 
-      {/* 섹션 간 구분 여백 (모바일에서는 12px grey-100 바) */}
       <div className="h-3 w-full sm:hidden" />
 
-      {/* 섹션 4: Bottom-Info + 화면당 단 하나뿐인 Primary CTA */}
+      {/* 섹션 4: Bottom-Info */}
       <Card
         suppressHydrationWarning
         className="mt-auto items-center px-6 pt-4 pb-8 sm:py-6"
@@ -448,7 +418,6 @@ export function MyPage({ user }: MyPageProps) {
           새로운 프로젝트 제안을 열어두고 있어요
         </Badge>
 
-        {/* 유일한 Primary CTA 버튼 */}
         <Button
           variant="tdsPrimary"
           size="tdsXl"
@@ -464,7 +433,6 @@ export function MyPage({ user }: MyPageProps) {
           GitHub 구경하기
         </Button>
 
-        {/* 보조 액션: Secondary/Ghost 버튼 */}
         <Button
           variant="tdsGhost"
           size="tdsMd"

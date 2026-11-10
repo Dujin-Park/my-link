@@ -9,7 +9,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth"
-import { Eye, Loader2, Pencil } from "lucide-react"
+import { Eye, Link2, Loader2, Pencil } from "lucide-react"
 import { AuthHeader } from "@/components/AuthHeader"
 import { LinkCard } from "@/components/LinkCard"
 import { MyPage } from "@/components/MyPage"
@@ -22,11 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  DEFAULT_LINKS,
-  DEFAULT_PROFILE,
-  type LinkItem,
-} from "@/lib/dummy-data"
+import { DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
 import { auth, signInWithGoogle } from "@/lib/firebase"
 import {
   ensureUserDocument,
@@ -34,8 +30,6 @@ import {
   resolveUserByIdentifier,
   type UserProfileDoc,
 } from "@/lib/links-service"
-
-const DEFAULT_LINK_IDS = new Set(DEFAULT_LINKS.map((item) => item.id))
 
 function PublicProfileFallback() {
   return (
@@ -317,14 +311,25 @@ function UserPublicProfileContent({
             </CardHeader>
 
             <CardContent className="divide-y divide-[var(--tds-grey-200)]/60">
-              {enabledLinks.map((item) => (
-                <LinkCard
-                  key={item.id}
-                  item={item}
-                  readOnly
-                  onLinkClick={handleLinkClick}
-                />
-              ))}
+              {enabledLinks.length === 0 ? (
+                <div className="mx-6 my-4 flex flex-col items-center justify-center gap-2 rounded-[16px] border border-dashed border-[var(--tds-grey-200)] py-10 text-center">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-[var(--tds-blue-50)] text-[var(--tds-blue-500)]">
+                    <Link2 className="size-5" />
+                  </div>
+                  <p className="text-[15px] font-semibold text-[var(--tds-grey-800)]">
+                    아직 등록된 링크가 없어요
+                  </p>
+                </div>
+              ) : (
+                enabledLinks.map((item) => (
+                  <LinkCard
+                    key={item.id}
+                    item={item}
+                    readOnly
+                    onLinkClick={handleLinkClick}
+                  />
+                ))
+              )}
             </CardContent>
           </Card>
 

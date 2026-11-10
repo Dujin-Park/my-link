@@ -9,6 +9,18 @@ import type { IconName, LinkItem } from "@/lib/dummy-data"
 import { validateLinkForm } from "@/lib/schemas"
 import { cn } from "@/lib/utils"
 
+function getDomainFromUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl)
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return parsed.hostname
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function renderLinkIcon(icon: IconName) {
   switch (icon) {
     case "github":
@@ -123,9 +135,18 @@ export function LinkCard({
   const [urlError, setUrlError] = React.useState("")
   const [saveError, setSaveError] = React.useState("")
   const [isSaving, setIsSaving] = React.useState(false)
+  const [faviconFailed, setFaviconFailed] = React.useState(false)
   const cardRef = React.useRef<HTMLDivElement>(null)
 
-  const isExternal = item.url.startsWith("http")
+  const domain = React.useMemo(() => getDomainFromUrl(item.url), [item.url])
+  const siteImageUrl = React.useMemo(() => {
+    if (!domain) return null
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`
+  }, [domain])
+
+  React.useEffect(() => {
+    setFaviconFailed(false)
+  }, [item.url])
 
   const handleClick = () => {
     void onLinkClick?.(item.id)
@@ -324,9 +345,21 @@ export function LinkCard({
         className="flex min-w-0 flex-1 items-center justify-between pr-1"
       >
         <div className="flex min-w-0 items-center gap-[14px]">
-          {/* 44px 아바타 (radius-l: 14px) */}
-          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-[14px] bg-[var(--tds-grey-100)] text-[var(--tds-grey-800)] transition-colors duration-200 group-hover:bg-[var(--tds-blue-50)] group-hover:text-[var(--tds-blue-500)]">
-            {renderLinkIcon(item.icon)}
+          {/* 44px 사이트 메인 이미지 / 파비콘 아바타 (radius-l: 14px) */}
+          <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-[var(--tds-grey-200)] bg-[var(--tds-white)] text-[var(--tds-grey-800)] transition-colors duration-200 group-hover:border-[var(--tds-blue-500)]/30 group-hover:bg-[var(--tds-blue-50)]">
+            {siteImageUrl && !faviconFailed ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={siteImageUrl}
+                alt={`${item.title} 사이트 아이콘`}
+                width={26}
+                height={26}
+                onError={() => setFaviconFailed(true)}
+                className="size-[26px] rounded-[6px] object-contain"
+              />
+            ) : (
+              renderLinkIcon(item.icon)
+            )}
           </div>
 
           {/* 타이틀 / 서브 스택 */}
@@ -335,7 +368,9 @@ export function LinkCard({
               {item.title}
             </span>
             <span className="truncate text-[13px] font-normal leading-[1.5] text-[var(--tds-grey-600)]">
-              {item.subtitle}
+              {item.subtitle && item.subtitle !== "클릭하면 해당 채널로 이동해요"
+                ? item.subtitle
+                : domain || item.url}
             </span>
           </div>
         </div>
