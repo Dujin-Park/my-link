@@ -11,11 +11,7 @@ import { AuthHeader } from "@/components/AuthHeader"
 import { LandingPage } from "@/components/LandingPage"
 import { MyPage } from "@/components/MyPage"
 import { Card } from "@/components/ui/card"
-import {
-  auth,
-  resolveGoogleRedirectResult,
-  signInWithGoogle,
-} from "@/lib/firebase"
+import { auth, signInWithGoogle } from "@/lib/firebase"
 import { cn } from "@/lib/utils"
 
 export default function Home() {
@@ -23,35 +19,37 @@ export default function Home() {
   const [isAuthLoading, setIsAuthLoading] = React.useState(true)
   const [isSigningIn, setIsSigningIn] = React.useState(false)
   const [authError, setAuthError] = React.useState("")
-  const [activeView, setActiveView] = React.useState<"landing" | "mypage">(
-    "landing"
-  )
+  // 로그인 완료 시 기본 화면은 항상 마이페이지(false)로 표시하며, 상단 '랜딩 홈' 탭 클릭 시에만 랜딩 미리보기(true)로 전환
+  const [isPreviewingLanding, setIsPreviewingLanding] = React.useState(false)
 
-  // onAuthStateChanged를 사용하여 새로고침 및 리다이렉트 로그인 복귀 시에도 세션 유지
   React.useEffect(() => {
-    resolveGoogleRedirectResult()
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setIsAuthLoading(false)
+      if (currentUser) {
+        setIsPreviewingLanding(false)
+      }
     })
 
     return () => unsubscribe()
   }, [])
 
   const handleSignInWithGoogle = async () => {
-    setAuthError("")
-    // 사용자 클릭 제스처 유지를 위해 상태 변경보다 signInWithGoogle() 호출을 먼저 시작
+    // 클릭 제스처(User Activation) 유지를 위해 어떤 React 상태 변경보다도 signInWithGoogle()을 가장 먼저 호출
     const signInPromise = signInWithGoogle()
+    setAuthError("")
     setIsSigningIn(true)
     try {
-      await signInPromise
-      setActiveView("mypage")
+      const credential = await signInPromise
+      if (credential?.user) {
+        setUser(credential.user)
+        setIsPreviewingLanding(false)
+      }
     } catch (err) {
       console.error("Google 로그인 오류:", err)
       setAuthError(
         err instanceof Error
-          ? `로그인에 실패했어요: ${err.message} (브라우저 주소창 우측의 팝업 차단을 해제해 주세요)`
+          ? `로그인에 실패했어요: ${err.message} (브라우저의 팝업 차단을 해제해 주세요)`
           : "Google 로그인 중 문제가 발생했어요."
       )
     } finally {
@@ -62,13 +60,13 @@ export default function Home() {
   const handleSignOut = async () => {
     try {
       await signOut(auth)
-      setActiveView("landing")
+      setIsPreviewingLanding(false)
     } catch (err) {
       console.error("로그아웃 오류:", err)
     }
   }
 
-  const isShowingLanding = !user || activeView === "landing"
+  const isShowingLanding = !user || isPreviewingLanding
 
   return (
     <main
@@ -94,7 +92,7 @@ export default function Home() {
           onSignOut={handleSignOut}
         />
 
-        {/* 로그인 상태에서 랜딩 페이지 <-> 마이페이지 전환 탭 바 */}
+        {/* 로그인 상태에서 마이페이지 <-> 랜딩 페이지 전환 탭 바 */}
         {!isAuthLoading && user ? (
           <div className="flex items-center justify-between border-b border-[var(--tds-grey-200)] bg-[var(--tds-white)] px-4 py-2.5 sm:rounded-[18px] sm:border sm:px-5">
             <span className="text-[13px] font-medium text-[var(--tds-grey-600)]">
@@ -106,29 +104,29 @@ export default function Home() {
             <div className="flex items-center gap-1 rounded-[999px] bg-[var(--tds-grey-100)] p-1">
               <button
                 type="button"
-                onClick={() => setActiveView("landing")}
+                onClick={() => setIsPreviewingLanding(false)}
                 className={cn(
                   "inline-flex h-[28px] items-center gap-1 rounded-[999px] px-3 text-[12px] font-semibold transition-colors",
-                  activeView === "landing"
-                    ? "bg-[var(--tds-white)] text-[var(--tds-blue-500)] shadow-xs"
-                    : "text-[var(--tds-grey-600)] hover:text-[var(--tds-grey-900)]"
-                )}
-              >
-                <HomeIcon className="size-3.5" />
-                랜딩 홈
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveView("mypage")}
-                className={cn(
-                  "inline-flex h-[28px] items-center gap-1 rounded-[999px] px-3 text-[12px] font-semibold transition-colors",
-                  activeView === "mypage"
+                  !isPreviewingLanding
                     ? "bg-[var(--tds-white)] text-[var(--tds-blue-500)] shadow-xs"
                     : "text-[var(--tds-grey-600)] hover:text-[var(--tds-grey-900)]"
                 )}
               >
                 <UserCircle className="size-3.5" />
                 마이페이지 편집
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPreviewingLanding(true)}
+                className={cn(
+                  "inline-flex h-[28px] items-center gap-1 rounded-[999px] px-3 text-[12px] font-semibold transition-colors",
+                  isPreviewingLanding
+                    ? "bg-[var(--tds-white)] text-[var(--tds-blue-500)] shadow-xs"
+                    : "text-[var(--tds-grey-600)] hover:text-[var(--tds-grey-900)]"
+                )}
+              >
+                <HomeIcon className="size-3.5" />
+                랜딩 홈
               </button>
             </div>
           </div>
@@ -148,7 +146,7 @@ export default function Home() {
             isSigningIn={isSigningIn}
             authError={authError}
             onSignInWithGoogle={handleSignInWithGoogle}
-            onOpenMyPage={() => setActiveView("mypage")}
+            onOpenMyPage={() => setIsPreviewingLanding(false)}
           />
         ) : (
           <MyPage user={user} />

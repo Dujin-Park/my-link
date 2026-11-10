@@ -27,11 +27,7 @@ import {
   DEFAULT_PROFILE,
   type LinkItem,
 } from "@/lib/dummy-data"
-import {
-  auth,
-  resolveGoogleRedirectResult,
-  signInWithGoogle,
-} from "@/lib/firebase"
+import { auth, signInWithGoogle } from "@/lib/firebase"
 import {
   ensureUserDocument,
   incrementClickCount,
@@ -72,8 +68,6 @@ function UserPublicProfileContent({
   const [isEditMode, setIsEditMode] = React.useState(false)
 
   React.useEffect(() => {
-    resolveGoogleRedirectResult()
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setCurrentUser(u)
       setIsAuthLoading(false)
@@ -126,7 +120,10 @@ function UserPublicProfileContent({
     const signInPromise = signInWithGoogle()
     setIsSigningIn(true)
     try {
-      await signInPromise
+      const credential = await signInPromise
+      if (credential?.user) {
+        setCurrentUser(credential.user)
+      }
     } catch (err) {
       console.error("Google 로그인 오류:", err)
     } finally {

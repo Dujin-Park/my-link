@@ -42,11 +42,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { DEFAULT_LINKS, type LinkItem } from "@/lib/dummy-data"
-import {
-  auth,
-  resolveGoogleRedirectResult,
-  signInWithGoogle,
-} from "@/lib/firebase"
+import { auth, signInWithGoogle } from "@/lib/firebase"
 import { fetchFirestoreLinks } from "@/lib/links-service"
 import { cn } from "@/lib/utils"
 
