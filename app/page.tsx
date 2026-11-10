@@ -11,7 +11,7 @@ import { AuthHeader } from "@/components/AuthHeader"
 import { LandingPage } from "@/components/LandingPage"
 import { MyPage } from "@/components/MyPage"
 import { Card } from "@/components/ui/card"
-import { auth, signInWithGoogle } from "@/lib/firebase"
+import { auth, signInWithGoogle, warmUpAuthResolver } from "@/lib/firebase"
 import { cn } from "@/lib/utils"
 
 export default function Home() {
@@ -23,6 +23,8 @@ export default function Home() {
   const [isPreviewingLanding, setIsPreviewingLanding] = React.useState(false)
 
   React.useEffect(() => {
+    warmUpAuthResolver()
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
       setIsAuthLoading(false)

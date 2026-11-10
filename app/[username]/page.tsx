@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { DEFAULT_PROFILE, type LinkItem } from "@/lib/dummy-data"
-import { auth, signInWithGoogle } from "@/lib/firebase"
+import { auth, signInWithGoogle, warmUpAuthResolver } from "@/lib/firebase"
 import {
   ensureUserDocument,
   incrementClickCount,
@@ -62,6 +62,8 @@ function UserPublicProfileContent({
   const [isEditMode, setIsEditMode] = React.useState(false)
 
   React.useEffect(() => {
+    warmUpAuthResolver()
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setCurrentUser(u)
       setIsAuthLoading(false)
